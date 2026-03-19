@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import pickle
 from datetime import datetime, timedelta, timezone
-from typing import Any
 from urllib.parse import urlparse
 
 import fsspec
@@ -16,8 +14,11 @@ class CacheStore:
 
     Cache entries are stored as two files per key:
 
-    - ``{prefix}/{fn_name}/{key}.pkl`` — pickled return value
-    - ``{prefix}/{fn_name}/{key}.meta.json`` — metadata (expiration)
+    - ``{prefix}/{fn_name}/{key}.bin`` -- serialized return value
+    - ``{prefix}/{fn_name}/{key}.meta.json`` -- metadata (expiration)
+
+    The store is agnostic to the serialization format. It stores and
+    retrieves raw bytes; the caller is responsible for serialization.
 
     Args:
         base_url: Base URL for the cache store. The scheme determines the
@@ -34,33 +35,31 @@ class CacheStore:
         self._fs = fsspec.filesystem(self._protocol, **storage_options)
 
     def _value_path(self, fn_name: str, key: str) -> str:
-        return f"{self._base_path}/{fn_name}/{key}.pkl"
+        return f"{self._base_path}/{fn_name}/{key}.bin"
 
     def _meta_path(self, fn_name: str, key: str) -> str:
         return f"{self._base_path}/{fn_name}/{key}.meta.json"
 
-    async def get(self, fn_name: str, key: str) -> tuple[bool, Any]:
-        """Retrieve a cached value.
+    async def get(self, fn_name: str, key: str) -> tuple[bool, bytes | None]:
+        """Retrieve cached bytes.
 
         Args:
             fn_name: The function/activity name (used as namespace).
             key: The cache key.
 
         Returns:
-            A tuple of ``(hit, value)``. If ``hit`` is False, ``value``
-            is None.
+            A tuple of ``(hit, raw_bytes)``. If ``hit`` is False,
+            ``raw_bytes`` is None.
         """
         meta_path = self._meta_path(fn_name, key)
 
         if not self._fs.exists(meta_path):
             return False, None
 
-        # Check TTL
         meta = json.loads(self._fs.cat_file(meta_path))
         expires_at = meta.get("expires_at")
         if expires_at is not None:
             if datetime.fromisoformat(expires_at) < datetime.now(timezone.utc):
-                # Expired — clean up lazily
                 self._delete_entry(fn_name, key)
                 return False, None
 
@@ -68,21 +67,25 @@ class CacheStore:
         if not self._fs.exists(value_path):
             return False, None
 
-        data = self._fs.cat_file(value_path)
-        return True, pickle.loads(data)  # noqa: S301
+        data: bytes = self._fs.cat_file(value_path)
+        return True, data
 
     async def set(
-        self, fn_name: str, key: str, value: Any, ttl: timedelta | None = None
+        self,
+        fn_name: str,
+        key: str,
+        data: bytes,
+        ttl: timedelta | None = None,
     ) -> None:
-        """Store a value in the cache.
+        """Store raw bytes in the cache.
 
         Args:
             fn_name: The function/activity name (used as namespace).
             key: The cache key.
-            value: The value to cache (must be picklable).
+            data: The raw bytes to store.
             ttl: Optional time-to-live. If None, the entry never expires.
         """
-        meta: dict[str, Any] = {}
+        meta: dict[str, str] = {}
         if ttl is not None:
             expires_at = datetime.now(timezone.utc) + ttl
             meta["expires_at"] = expires_at.isoformat()
@@ -90,8 +93,7 @@ class CacheStore:
         value_path = self._value_path(fn_name, key)
         meta_path = self._meta_path(fn_name, key)
 
-        # Write value first, then metadata (metadata signals "entry exists")
-        self._fs.pipe_file(value_path, pickle.dumps(value))
+        self._fs.pipe_file(value_path, data)
         self._fs.pipe_file(meta_path, json.dumps(meta).encode())
 
     async def delete(self, fn_name: str, key: str) -> None:
@@ -104,6 +106,9 @@ class CacheStore:
         self._delete_entry(fn_name, key)
 
     def _delete_entry(self, fn_name: str, key: str) -> None:
-        for path in [self._value_path(fn_name, key), self._meta_path(fn_name, key)]:
+        for path in [
+            self._value_path(fn_name, key),
+            self._meta_path(fn_name, key),
+        ]:
             if self._fs.exists(path):
                 self._fs.rm(path)

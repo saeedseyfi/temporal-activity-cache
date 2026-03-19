@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import typing
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
 import temporalio.worker
 
+from temporal_activity_cache._codec import decode_value, encode_value
 from temporal_activity_cache._decorator import NO_CACHE_ATTR
 from temporal_activity_cache._keys import compute_cache_key
 from temporal_activity_cache._store import CacheStore
@@ -78,20 +80,26 @@ class _CachingActivityInboundInterceptor(
         input: temporalio.worker.ExecuteActivityInput,
     ) -> Any:
         """Execute the activity with caching."""
-        # Check opt-out marker
         if getattr(input.fn, NO_CACHE_ATTR, False):
             return await super().execute_activity(input)
 
         fn_name = getattr(input.fn, "__name__", str(input.fn))
         key = compute_cache_key(fn_name, tuple(input.args), self._root._key_fn)
 
-        hit, value = await self._root._store.get(fn_name, key)
-        if hit:
+        # Resolve return type for deserialization
+        try:
+            hints = typing.get_type_hints(input.fn)
+        except Exception:
+            hints = {}
+        return_type = hints.get("return")
+
+        hit, data = await self._root._store.get(fn_name, key)
+        if hit and data is not None:
             logger.debug("Cache hit for %s (key=%s)", fn_name, key[:8])
-            return value
+            return decode_value(data, return_type)
 
         logger.debug("Cache miss for %s (key=%s)", fn_name, key[:8])
         result = await super().execute_activity(input)
 
-        await self._root._store.set(fn_name, key, result, self._root._ttl)
+        await self._root._store.set(fn_name, key, encode_value(result), self._root._ttl)
         return result

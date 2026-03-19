@@ -85,7 +85,7 @@ class TestCachedDecorator:
         assert my_function.__name__ == "my_function"
 
     async def test_complex_return_values(self, store_url: str) -> None:
-        """Complex return types survive pickle round-trip."""
+        """Complex return types survive serialization round-trip."""
 
         @cached(store_url)
         async def fn() -> dict:

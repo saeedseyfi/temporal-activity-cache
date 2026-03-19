@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import functools
 import logging
+import typing
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any, TypeVar
 
 from temporal_activity_cache._keys import compute_cache_key
+from temporal_activity_cache._codec import encode_value, decode_value
 from temporal_activity_cache._store import CacheStore
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,11 @@ def cached(
     remotely (GCS, S3, local, etc.) so it is shared across distributed
     workers.
 
+    Cached values are serialized using Temporal's ``PayloadConverter``,
+    the same converter the worker uses for activity inputs and outputs.
+    If called inside a Temporal activity, the worker's configured
+    converter is used automatically.
+
     Args:
         store_url: Base URL for the cache store. The scheme determines the
             backend (``gs://`` for GCS, ``s3://`` for S3, etc.).
@@ -84,19 +91,26 @@ def cached(
     def decorator(fn: F) -> F:
         fn_name = getattr(fn, "__name__", str(fn))
 
+        # Resolve return type for deserialization
+        try:
+            hints = typing.get_type_hints(fn)
+        except Exception:
+            hints = {}
+        return_type = hints.get("return")
+
         @functools.wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             key = compute_cache_key(fn_name, args, key_fn)
 
-            hit, value = await store.get(fn_name, key)
-            if hit:
+            hit, data = await store.get(fn_name, key)
+            if hit and data is not None:
                 logger.debug("Cache hit for %s (key=%s)", fn_name, key[:8])
-                return value
+                return decode_value(data, return_type)
 
             logger.debug("Cache miss for %s (key=%s)", fn_name, key[:8])
             result = await fn(*args, **kwargs)
 
-            await store.set(fn_name, key, result, ttl)
+            await store.set(fn_name, key, encode_value(result), ttl)
             return result
 
         return wrapper  # type: ignore[return-value]
