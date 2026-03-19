@@ -34,22 +34,14 @@ class TestComputeCacheKey:
 
     def test_key_fn_selects_args(self) -> None:
         """key_fn controls which arguments are included."""
-        key1 = compute_cache_key(
-            "fn", ("a", "b"), key_fn=lambda x, y: {"x": x}
-        )
-        key2 = compute_cache_key(
-            "fn", ("a", "DIFFERENT"), key_fn=lambda x, y: {"x": x}
-        )
+        key1 = compute_cache_key("fn", ("a", "b"), key_fn=lambda x, y: {"x": x})
+        key2 = compute_cache_key("fn", ("a", "DIFFERENT"), key_fn=lambda x, y: {"x": x})
         assert key1 == key2
 
     def test_key_fn_different_selected_args(self) -> None:
         """key_fn with different selected values produces different keys."""
-        key1 = compute_cache_key(
-            "fn", ("a", "b"), key_fn=lambda x, y: {"x": x}
-        )
-        key2 = compute_cache_key(
-            "fn", ("DIFFERENT", "b"), key_fn=lambda x, y: {"x": x}
-        )
+        key1 = compute_cache_key("fn", ("a", "b"), key_fn=lambda x, y: {"x": x})
+        key2 = compute_cache_key("fn", ("DIFFERENT", "b"), key_fn=lambda x, y: {"x": x})
         assert key1 != key2
 
     def test_dataclass_inputs(self) -> None:

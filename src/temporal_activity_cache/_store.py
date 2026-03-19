@@ -30,9 +30,7 @@ class CacheStore:
         self._base_url = base_url.rstrip("/")
         parsed = urlparse(self._base_url)
         self._protocol = parsed.scheme or "file"
-        self._base_path = (
-            parsed.netloc + parsed.path if parsed.netloc else parsed.path
-        )
+        self._base_path = parsed.netloc + parsed.path if parsed.netloc else parsed.path
         self._fs = fsspec.filesystem(self._protocol, **storage_options)
 
     def _value_path(self, fn_name: str, key: str) -> str:
