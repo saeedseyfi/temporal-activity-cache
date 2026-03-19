@@ -83,7 +83,7 @@ class _CachingActivityInboundInterceptor(
             return await super().execute_activity(input)
 
         fn_name = getattr(input.fn, "__name__", str(input.fn))
-        key = compute_cache_key(fn_name, input.args, self._root._key_fn)
+        key = compute_cache_key(fn_name, tuple(input.args), self._root._key_fn)
 
         hit, value = await self._root._store.get(fn_name, key)
         if hit:

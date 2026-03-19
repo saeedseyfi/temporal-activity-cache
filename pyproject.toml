@@ -2,7 +2,7 @@
 name = "temporal-activity-cache"
 version = "0.1.0"
 description = "Content-addressed activity memoization with shared remote storage for Temporal"
-authors = [{ name = "Saeed Seyfi" }]
+authors = [{ name = "Saeed Seyfi", email = "me@saeedseyfi.com" }]
 requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
