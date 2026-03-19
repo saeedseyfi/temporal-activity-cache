@@ -12,9 +12,11 @@ so it is shared across all workers.
 """
 
 from temporal_activity_cache._decorator import cached, no_cache
+from temporal_activity_cache._interceptor import CachingInterceptor
 from temporal_activity_cache._serializers import register_serializer
 
 __all__ = [
+    "CachingInterceptor",
     "cached",
     "no_cache",
     "register_serializer",
