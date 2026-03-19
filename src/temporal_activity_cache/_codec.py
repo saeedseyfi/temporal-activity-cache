@@ -59,5 +59,6 @@ def decode_value(data: bytes, type_hint: type | None = None) -> Any:
     converter = _get_converter()
     payload = Payload()
     payload.ParseFromString(data)
-    results = converter.from_payloads([payload], [type_hint])
+    type_hints = [type_hint] if type_hint is not None else None
+    results = converter.from_payloads([payload], type_hints)
     return results[0]
