@@ -4,7 +4,7 @@ Content-addressed activity memoization with shared remote storage. Same inputs =
 
 ## Problem
 
-Temporal activities are not idempotent by default. If a workflow retries or re-runs, activities execute again — even when their inputs haven't changed. For expensive activities (AI inference, API calls, data processing), this wastes time and money. This module caches activity results so repeated calls with the same inputs return instantly.
+Temporal activities are not idempotent by default. If a workflow retries or re-runs, activities execute again, even when their inputs haven't changed. For expensive activities (LLM calls, API requests, data processing), this wastes time and money. This module caches activity results so repeated calls with the same inputs return instantly.
 
 ## Install
 
@@ -71,9 +71,9 @@ async def commit(input: CommitInput) -> CommitOutput:
 ## How It Works
 
 1. **Key computation**: SHA256 hash of function name + serialized arguments
-2. **Cache check**: Look up `{base_url}/{fn_name}/{key}.pkl` in remote store
-3. **Cache hit**: Unpickle and return the stored result — activity body never runs
-4. **Cache miss**: Execute activity, pickle result, upload to remote store
+2. **Cache check**: Look up `{base_url}/{fn_name}/{key}` in remote store
+3. **Cache hit**: Deserialize and return the stored result. Activity body never runs.
+4. **Cache miss**: Execute activity, serialize result, upload to remote store.
 
 ## Serialization
 
